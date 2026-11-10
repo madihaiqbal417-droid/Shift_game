@@ -1,45 +1,48 @@
 #include <SFML/Graphics.hpp>
-#include <vector>
 
 int main()
 {
     const float windowWidth = 800.f;
-    const float playerSize = 60.f;  // circle radius 30 -> 60 px wide and tall
+    const float windowHeight = 600.f;
+    const float playerSize = 40.f;
 
     sf::RenderWindow window(
         sf::VideoMode({800, 600}),
         "SHIFT - Two Realities"
     );
+    window.setKeyRepeatEnabled(false);  // one Shift press = one swap
 
-    // Player
+    // Middle platform (exactly centered, so the two worlds mirror each other)
+    const float midY = windowHeight / 2.f;
+    const float midThickness = 20.f;
+    const float platformTop = midY - midThickness / 2.f;     // 290
+    const float platformBottom = midY + midThickness / 2.f;  // 310
+
+    sf::RectangleShape middle({windowWidth, midThickness});
+    middle.setPosition({0.f, platformTop});
+    middle.setFillColor(sf::Color(200, 200, 200));
+
+    // Backgrounds for the two worlds
+    sf::RectangleShape topBackground({windowWidth, platformTop});
+    topBackground.setPosition({0.f, 0.f});
+    topBackground.setFillColor(sf::Color(135, 190, 235));    // bright sky
+
+    sf::RectangleShape bottomBackground({windowWidth, windowHeight - platformBottom});
+    bottomBackground.setPosition({0.f, platformBottom});
+    bottomBackground.setFillColor(sf::Color(40, 10, 30));    // nightmare
+
+    // Player (starts standing on top of the middle platform)
     sf::CircleShape player(playerSize / 2.f);
     player.setFillColor(sf::Color::Green);
-    player.setPosition({385.f, 285.f});
+    player.setPosition({100.f, platformTop - playerSize});
 
-    // Ground
-    const float groundY = 540.f;
-    sf::RectangleShape ground({windowWidth, 60.f});
-    ground.setPosition({0.f, groundY});
-    ground.setFillColor(sf::Color(90, 90, 90));
-
-    // Platforms
-    std::vector<sf::RectangleShape> platforms;
-
-    sf::RectangleShape platform1({200.f, 20.f});
-    platform1.setPosition({100.f, 430.f});
-    platform1.setFillColor(sf::Color(150, 100, 50));
-    platforms.push_back(platform1);
-
-    sf::RectangleShape platform2({200.f, 20.f});
-    platform2.setPosition({450.f, 330.f});
-    platform2.setFillColor(sf::Color(150, 100, 50));
-    platforms.push_back(platform2);
+    bool inTopWorld = true;
 
     // Physics
     sf::Vector2f velocity{0.f, 0.f};
     const float speed = 300.f;
     const float gravity = 1500.f;
-    const float jumpSpeed = -650.f;  // negative = upward
+    const float jumpSpeed = -650.f;  // away from the platform in the top world
     bool onGround = false;
 
     sf::Clock clock;
@@ -48,12 +51,29 @@ int main()
     {
         float dt = clock.restart().asSeconds();
 
+        // +1 in the top world (gravity down), -1 in the bottom world (gravity up)
+        float dir = inTopWorld ? 1.f : -1.f;
+
         // Events
         while (const auto event = window.pollEvent())
         {
             if (event->is<sf::Event::Closed>())
             {
                 window.close();
+            }
+
+            if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
+            {
+                if (keyPressed->code == sf::Keyboard::Key::LShift ||
+                    keyPressed->code == sf::Keyboard::Key::RShift)
+                {
+                    // Switch worlds: mirror the player across the middle line
+                    inTopWorld = !inTopWorld;
+                    sf::Vector2f p = player.getPosition();
+                    player.setPosition({p.x, windowHeight - p.y - playerSize});
+                    velocity.y = -velocity.y;
+                    dir = inTopWorld ? 1.f : -1.f;
+                }
             }
         }
 
@@ -68,7 +88,7 @@ int main()
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
             moveX += 1.f;
 
-        // Jump input
+        // Jump input (jump direction flips with gravity)
         bool jumpPressed =
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) ||
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W) ||
@@ -76,16 +96,13 @@ int main()
 
         if (jumpPressed && onGround)
         {
-            velocity.y = jumpSpeed;
+            velocity.y = jumpSpeed * dir;
             onGround = false;
         }
 
-        // Remember where the player's feet were before moving
-        float prevBottom = player.getPosition().y + playerSize;
-
         // Update velocity and position
         velocity.x = moveX * speed;
-        velocity.y += gravity * dt;
+        velocity.y += gravity * dir * dt;
         player.move(velocity * dt);
 
         // Screen boundaries
@@ -93,7 +110,6 @@ int main()
 
         if (pos.x < 0.f)
             pos.x = 0.f;
-
         if (pos.x > windowWidth - playerSize)
             pos.x = windowWidth - playerSize;
 
@@ -102,47 +118,43 @@ int main()
             pos.y = 0.f;
             velocity.y = 0.f;
         }
-
-        player.setPosition(pos);
-
-        // Ground collision
-        onGround = false;
-        float bottom = player.getPosition().y + playerSize;
-        if (bottom > groundY)
+        if (pos.y > windowHeight - playerSize)
         {
-            player.setPosition({player.getPosition().x, groundY - playerSize});
+            pos.y = windowHeight - playerSize;
             velocity.y = 0.f;
-            onGround = true;
         }
 
-        // Platform collision (landing from above)
-        for (const auto& platform : platforms)
+        // Middle platform collision
+        onGround = false;
+
+        if (inTopWorld)
         {
-            sf::Vector2f playerPos = player.getPosition();
-            sf::Vector2f platPos = platform.getPosition();
-            sf::Vector2f platSize = platform.getSize();
-
-            float playerBottom = playerPos.y + playerSize;
-
-            bool overlapX = playerPos.x + playerSize > platPos.x &&
-                            playerPos.x < platPos.x + platSize.x;
-
-            bool wasAbove = prevBottom <= platPos.y;
-            bool nowBelowTop = playerBottom >= platPos.y;
-
-            if (velocity.y >= 0.f && overlapX && wasAbove && nowBelowTop)
+            // Stand on top of the platform
+            if (pos.y + playerSize > platformTop)
             {
-                player.setPosition({playerPos.x, platPos.y - playerSize});
+                pos.y = platformTop - playerSize;
+                velocity.y = 0.f;
+                onGround = true;
+            }
+        }
+        else
+        {
+            // Hang from the underside of the platform
+            if (pos.y < platformBottom)
+            {
+                pos.y = platformBottom;
                 velocity.y = 0.f;
                 onGround = true;
             }
         }
 
+        player.setPosition(pos);
+
         // Draw
         window.clear(sf::Color::Black);
-        window.draw(ground);
-        for (const auto& platform : platforms)
-            window.draw(platform);
+        window.draw(topBackground);
+        window.draw(bottomBackground);
+        window.draw(middle);
         window.draw(player);
         window.display();
     }
