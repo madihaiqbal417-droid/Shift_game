@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <cstdint>
 #include <vector>
 
 struct Obstacle
@@ -64,6 +65,25 @@ int main()
     const float jumpSpeed = -650.f;  // away from the platform in the top world
     bool onGround = false;
 
+    // Nightmare meter: 0 = empty, 1 = full (full means you lose)
+    float nightmare = 0.f;
+    const float nightmareFillTime = 7.f;     // seconds to fill in the bottom world
+    const float nightmareDrainTime = 3.5f;   // seconds to empty in the top world
+    float elapsed = 0.f;                     // total time, used for blinking
+
+    // The meter bar (top-left corner)
+    const float barWidth = 200.f;
+    const float barHeight = 14.f;
+
+    sf::RectangleShape barBack({barWidth, barHeight});
+    barBack.setPosition({20.f, 15.f});
+    barBack.setFillColor(sf::Color(30, 30, 40));
+    barBack.setOutlineThickness(2.f);
+    barBack.setOutlineColor(sf::Color::White);
+
+    sf::RectangleShape barFill({0.f, barHeight});
+    barFill.setPosition({20.f, 15.f});
+
     // Helper: do the player's square and a rectangle overlap?
     auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
     {
@@ -80,6 +100,7 @@ int main()
         velocity = {0.f, 0.f};
         inTopWorld = true;
         onGround = false;
+        nightmare = 0.f;
     };
 
     // Obstacles
@@ -133,6 +154,7 @@ int main()
     while (window.isOpen())
     {
         float dt = clock.restart().asSeconds();
+        elapsed += dt;
 
         // +1 in the top world (gravity down), -1 in the bottom world (gravity up)
         float dir = inTopWorld ? 1.f : -1.f;
@@ -341,6 +363,31 @@ int main()
             }
         }
 
+        // ---- 5) Nightmare meter ----
+        if (!inTopWorld)
+            nightmare += dt / nightmareFillTime;
+        else
+            nightmare -= dt / nightmareDrainTime;
+
+        if (nightmare < 0.f)
+            nightmare = 0.f;
+
+        if (nightmare >= 1.f)
+            restart();   // the nightmare consumed you
+
+        // Update the bar: width follows the meter, color goes purple -> red
+        barFill.setSize({barWidth * nightmare, barHeight});
+        barFill.setFillColor(sf::Color(
+            static_cast<std::uint8_t>(150.f + 80.f * nightmare),
+            static_cast<std::uint8_t>(80.f - 50.f * nightmare),
+            static_cast<std::uint8_t>(220.f - 180.f * nightmare)
+        ));
+
+        // Warning: blink the outline red when the meter is nearly full
+        bool blinkRed = nightmare > 0.75f &&
+                        static_cast<int>(elapsed * 6.f) % 2 == 0;
+        barBack.setOutlineColor(blinkRed ? sf::Color(255, 60, 60) : sf::Color::White);
+
         // Draw
         window.clear(sf::Color::Black);
         window.draw(topBackground);
@@ -362,6 +409,10 @@ int main()
         }
 
         window.draw(player);
+
+        window.draw(barBack);
+        window.draw(barFill);
+
         window.display();
     }
 
