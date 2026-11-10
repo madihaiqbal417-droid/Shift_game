@@ -8,11 +8,21 @@ struct Obstacle
     bool deadly;
 };
 
+struct Monster
+{
+    sf::RectangleShape body;
+    float minX;       // leftmost position of the monster's left edge
+    float maxX;       // rightmost position of the monster's left edge
+    float speed;      // pixels per second
+    float direction;  // +1 = moving right, -1 = moving left
+};
+
 int main()
 {
     const float windowWidth = 800.f;
     const float windowHeight = 600.f;
     const float playerSize = 40.f;
+    const float monsterSize = 36.f;
 
     sf::RenderWindow window(
         sf::VideoMode({800, 600}),
@@ -92,11 +102,31 @@ int main()
         obstacles.push_back(o);
     };
 
+    // Monsters (bottom world only, hanging from the middle platform)
+    std::vector<Monster> monsters;
+
+    // addMonster(startX, minX, maxX, speed)
+    auto addMonster = [&](float startX, float minX, float maxX, float monsterSpeed)
+    {
+        Monster m{sf::RectangleShape({monsterSize, monsterSize}),
+                  minX, maxX, monsterSpeed, 1.f};
+        m.body.setPosition({startX, platformBottom});
+        m.body.setFillColor(sf::Color(200, 50, 90));
+        monsters.push_back(m);
+    };
+
     // Test layout
     addObstacle(true,  false, 140.f,  60.f, 60.f);   // top: solid step
     addObstacle(true,  true,  250.f, 300.f, 30.f);   // top: wide deadly strip
     addObstacle(false, false, 380.f,  60.f, 60.f);   // bottom: solid block
     addObstacle(false, false, 680.f,  60.f, 60.f);   // bottom: solid block
+
+    addMonster(260.f, 240.f, 340.f, 70.f);           // bottom: before the first block
+    addMonster(480.f, 460.f, 640.f, 90.f);           // bottom: between the two blocks
+
+    // Monster eyes (one shape reused for all monsters)
+    sf::CircleShape eye(4.f);
+    eye.setFillColor(sf::Color(255, 230, 80));
 
     sf::Clock clock;
 
@@ -276,6 +306,41 @@ int main()
             }
         }
 
+        // ---- 4) Monsters: patrol back and forth ----
+        for (auto& m : monsters)
+        {
+            sf::Vector2f mp = m.body.getPosition();
+            mp.x += m.direction * m.speed * dt;
+
+            if (mp.x > m.maxX)
+            {
+                mp.x = m.maxX;
+                m.direction = -1.f;
+            }
+            if (mp.x < m.minX)
+            {
+                mp.x = m.minX;
+                m.direction = 1.f;
+            }
+
+            m.body.setPosition(mp);
+        }
+
+        // Monsters only hurt you in the bottom world
+        if (!inTopWorld)
+        {
+            sf::Vector2f p = player.getPosition();
+
+            for (const auto& m : monsters)
+            {
+                if (overlaps({p.x + 4.f, p.y + 4.f}, playerSize - 8.f, m.body))
+                {
+                    restart();
+                    break;
+                }
+            }
+        }
+
         // Draw
         window.clear(sf::Color::Black);
         window.draw(topBackground);
@@ -284,6 +349,17 @@ int main()
 
         for (const auto& o : obstacles)
             window.draw(o.shape);
+
+        for (const auto& m : monsters)
+        {
+            window.draw(m.body);
+
+            sf::Vector2f mp = m.body.getPosition();
+            eye.setPosition({mp.x + 8.f, mp.y + 18.f});
+            window.draw(eye);
+            eye.setPosition({mp.x + 24.f, mp.y + 18.f});
+            window.draw(eye);
+        }
 
         window.draw(player);
         window.display();
