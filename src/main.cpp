@@ -1,4 +1,12 @@
 #include <SFML/Graphics.hpp>
+#include <vector>
+
+struct Obstacle
+{
+    sf::RectangleShape shape;
+    bool inTopWorld;
+    bool deadly;
+};
 
 int main()
 {
@@ -12,7 +20,7 @@ int main()
     );
     window.setKeyRepeatEnabled(false);  // one Shift press = one swap
 
-    // Middle platform (exactly centered, so the two worlds mirror each other)
+    // Middle platform (centered, so the two worlds mirror each other)
     const float midY = windowHeight / 2.f;
     const float midThickness = 20.f;
     const float platformTop = midY - midThickness / 2.f;     // 290
@@ -31,10 +39,11 @@ int main()
     bottomBackground.setPosition({0.f, platformBottom});
     bottomBackground.setFillColor(sf::Color(40, 10, 30));    // nightmare
 
-    // Player (starts standing on top of the middle platform)
+    // Player
+    const sf::Vector2f startPos{60.f, platformTop - playerSize};
     sf::CircleShape player(playerSize / 2.f);
     player.setFillColor(sf::Color::Green);
-    player.setPosition({100.f, platformTop - playerSize});
+    player.setPosition(startPos);
 
     bool inTopWorld = true;
 
@@ -44,6 +53,50 @@ int main()
     const float gravity = 1500.f;
     const float jumpSpeed = -650.f;  // away from the platform in the top world
     bool onGround = false;
+
+    // Helper: do the player's square and a rectangle overlap?
+    auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
+    {
+        sf::Vector2f rp = r.getPosition();
+        sf::Vector2f rs = r.getSize();
+        return p.x < rp.x + rs.x && p.x + size > rp.x &&
+               p.y < rp.y + rs.y && p.y + size > rp.y;
+    };
+
+    // Helper: send the player back to the start
+    auto restart = [&]()
+    {
+        player.setPosition(startPos);
+        velocity = {0.f, 0.f};
+        inTopWorld = true;
+        onGround = false;
+    };
+
+    // Obstacles
+    std::vector<Obstacle> obstacles;
+
+    // addObstacle(inTopWorld, deadly, x, width, height)
+    auto addObstacle = [&](bool topWorld, bool deadly, float x, float width, float height)
+    {
+        Obstacle o{sf::RectangleShape({width, height}), topWorld, deadly};
+        float y = topWorld ? platformTop - height : platformBottom;
+        o.shape.setPosition({x, y});
+
+        if (deadly)
+            o.shape.setFillColor(sf::Color(200, 40, 40));
+        else if (topWorld)
+            o.shape.setFillColor(sf::Color(120, 90, 60));
+        else
+            o.shape.setFillColor(sf::Color(110, 60, 120));
+
+        obstacles.push_back(o);
+    };
+
+    // Test layout
+    addObstacle(true,  false, 140.f,  60.f, 60.f);   // top: solid step
+    addObstacle(true,  true,  250.f, 300.f, 30.f);   // top: wide deadly strip
+    addObstacle(false, false, 380.f,  60.f, 60.f);   // bottom: solid block
+    addObstacle(false, false, 680.f,  60.f, 60.f);   // bottom: solid block
 
     sf::Clock clock;
 
@@ -67,12 +120,29 @@ int main()
                 if (keyPressed->code == sf::Keyboard::Key::LShift ||
                     keyPressed->code == sf::Keyboard::Key::RShift)
                 {
-                    // Switch worlds: mirror the player across the middle line
-                    inTopWorld = !inTopWorld;
+                    // Where would the player appear after the shift?
                     sf::Vector2f p = player.getPosition();
-                    player.setPosition({p.x, windowHeight - p.y - playerSize});
-                    velocity.y = -velocity.y;
-                    dir = inTopWorld ? 1.f : -1.f;
+                    sf::Vector2f mirrored{p.x, windowHeight - p.y - playerSize};
+                    bool targetTop = !inTopWorld;
+
+                    // Blocked if a solid obstacle already occupies that spot
+                    bool blocked = false;
+                    for (const auto& o : obstacles)
+                    {
+                        if (o.inTopWorld == targetTop && !o.deadly &&
+                            overlaps(mirrored, playerSize, o.shape))
+                        {
+                            blocked = true;
+                        }
+                    }
+
+                    if (!blocked)
+                    {
+                        inTopWorld = targetTop;
+                        player.setPosition(mirrored);
+                        velocity.y = -velocity.y;
+                        dir = inTopWorld ? 1.f : -1.f;
+                    }
                 }
             }
         }
@@ -100,18 +170,37 @@ int main()
             onGround = false;
         }
 
-        // Update velocity and position
         velocity.x = moveX * speed;
         velocity.y += gravity * dir * dt;
-        player.move(velocity * dt);
 
-        // Screen boundaries
         sf::Vector2f pos = player.getPosition();
+
+        // ---- 1) Move horizontally, then push out of solid obstacles ----
+        pos.x += velocity.x * dt;
 
         if (pos.x < 0.f)
             pos.x = 0.f;
         if (pos.x > windowWidth - playerSize)
             pos.x = windowWidth - playerSize;
+
+        for (const auto& o : obstacles)
+        {
+            if (o.inTopWorld != inTopWorld || o.deadly)
+                continue;
+            if (!overlaps(pos, playerSize, o.shape))
+                continue;
+
+            sf::Vector2f op = o.shape.getPosition();
+            sf::Vector2f os = o.shape.getSize();
+
+            if (velocity.x > 0.f)
+                pos.x = op.x - playerSize;   // hit its left side
+            else if (velocity.x < 0.f)
+                pos.x = op.x + os.x;         // hit its right side
+        }
+
+        // ---- 2) Move vertically, then push out of solid obstacles ----
+        pos.y += velocity.y * dt;
 
         if (pos.y < 0.f)
         {
@@ -124,12 +213,37 @@ int main()
             velocity.y = 0.f;
         }
 
-        // Middle platform collision
         onGround = false;
 
+        for (const auto& o : obstacles)
+        {
+            if (o.inTopWorld != inTopWorld || o.deadly)
+                continue;
+            if (!overlaps(pos, playerSize, o.shape))
+                continue;
+
+            sf::Vector2f op = o.shape.getPosition();
+            sf::Vector2f os = o.shape.getSize();
+
+            bool movingTowardGround = (velocity.y * dir > 0.f);
+
+            if (movingTowardGround)
+            {
+                // Land on the obstacle's surface
+                pos.y = inTopWorld ? op.y - playerSize : op.y + os.y;
+                onGround = true;
+            }
+            else
+            {
+                // Bump into the obstacle's other side
+                pos.y = inTopWorld ? op.y + os.y : op.y - playerSize;
+            }
+            velocity.y = 0.f;
+        }
+
+        // Middle platform collision
         if (inTopWorld)
         {
-            // Stand on top of the platform
             if (pos.y + playerSize > platformTop)
             {
                 pos.y = platformTop - playerSize;
@@ -139,7 +253,6 @@ int main()
         }
         else
         {
-            // Hang from the underside of the platform
             if (pos.y < platformBottom)
             {
                 pos.y = platformBottom;
@@ -150,11 +263,28 @@ int main()
 
         player.setPosition(pos);
 
+        // ---- 3) Deadly obstacles (slightly forgiving hitbox) ----
+        for (const auto& o : obstacles)
+        {
+            if (o.inTopWorld != inTopWorld || !o.deadly)
+                continue;
+
+            if (overlaps({pos.x + 4.f, pos.y + 4.f}, playerSize - 8.f, o.shape))
+            {
+                restart();
+                break;
+            }
+        }
+
         // Draw
         window.clear(sf::Color::Black);
         window.draw(topBackground);
         window.draw(bottomBackground);
         window.draw(middle);
+
+        for (const auto& o : obstacles)
+            window.draw(o.shape);
+
         window.draw(player);
         window.display();
     }
