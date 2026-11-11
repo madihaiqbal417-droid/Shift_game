@@ -50,6 +50,13 @@ int main()
     bottomBackground.setPosition({0.f, platformBottom});
     bottomBackground.setFillColor(sf::Color(40, 10, 30));    // nightmare
 
+    // Exit door (top world, right edge)
+    sf::RectangleShape goal({40.f, 60.f});
+    goal.setPosition({740.f, platformTop - 60.f});
+    goal.setFillColor(sf::Color(255, 210, 50));
+    goal.setOutlineThickness(2.f);
+    goal.setOutlineColor(sf::Color(255, 250, 200));
+
     // Player
     const sf::Vector2f startPos{60.f, platformTop - playerSize};
     sf::CircleShape player(playerSize / 2.f);
@@ -67,7 +74,7 @@ int main()
 
     // Nightmare meter: 0 = empty, 1 = full (full means you lose)
     float nightmare = 0.f;
-    const float nightmareFillTime = 7.f;     // seconds to fill in the bottom world
+    float nightmareFillTime = 7.f;           // seconds to fill (set per level)
     const float nightmareDrainTime = 3.5f;   // seconds to empty in the top world
     float elapsed = 0.f;                     // total time, used for blinking
 
@@ -83,6 +90,11 @@ int main()
 
     sf::RectangleShape barFill({0.f, barHeight});
     barFill.setPosition({20.f, 15.f});
+
+    // Level progress
+    const int totalLevels = 3;
+    int currentLevel = 0;
+    bool gameWon = false;
 
     // Helper: do the player's square and a rectangle overlap?
     auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
@@ -136,18 +148,50 @@ int main()
         monsters.push_back(m);
     };
 
-    // Test layout
-    addObstacle(true,  false, 140.f,  60.f, 60.f);   // top: solid step
-    addObstacle(true,  true,  250.f, 300.f, 30.f);   // top: wide deadly strip
-    addObstacle(false, false, 380.f,  60.f, 60.f);   // bottom: solid block
-    addObstacle(false, false, 680.f,  60.f, 60.f);   // bottom: solid block
+    // Build a level: clear the old one, add the new obstacles and monsters
+    auto loadLevel = [&](int index)
+    {
+        obstacles.clear();
+        monsters.clear();
 
-    addMonster(260.f, 240.f, 340.f, 70.f);           // bottom: before the first block
-    addMonster(480.f, 460.f, 640.f, 90.f);           // bottom: between the two blocks
+        if (index == 0)
+        {
+            // Level 1: learn to shift. The pillar is too tall to jump over.
+            nightmareFillTime = 8.f;
+            addObstacle(true, true, 380.f, 40.f, 220.f);
+        }
+        else if (index == 1)
+        {
+            // Level 2: a wide deadly strip, a hanging block and two monsters
+            nightmareFillTime = 7.f;
+            addObstacle(true,  false, 120.f,  60.f, 60.f);   // top: solid step
+            addObstacle(true,  true,  230.f, 300.f, 30.f);   // top: wide deadly strip
+            addObstacle(false, false, 360.f,  60.f, 60.f);   // bottom: hanging block
+            addMonster(250.f, 240.f, 320.f, 70.f);
+            addMonster(460.f, 440.f, 500.f, 80.f);
+        }
+        else
+        {
+            // Level 3: go under the first strip, land in the gap, jump the second
+            nightmareFillTime = 8.f;
+            addObstacle(true,  true,  180.f, 280.f, 30.f);   // top: wide deadly strip
+            addObstacle(true,  true,  540.f, 160.f, 30.f);   // top: shorter strip (jumpable)
+            addObstacle(false, false, 300.f,  40.f, 70.f);   // bottom: hanging block
+            addMonster(200.f, 190.f, 260.f, 80.f);
+            addMonster(370.f, 350.f, 420.f, 100.f);
+        }
+
+        restart();
+    };
+
+    loadLevel(0);
 
     // Monster eyes (one shape reused for all monsters)
     sf::CircleShape eye(4.f);
     eye.setFillColor(sf::Color(255, 230, 80));
+
+    // Level progress squares (top-right corner)
+    sf::RectangleShape levelSquare({14.f, 14.f});
 
     sf::Clock clock;
 
@@ -169,8 +213,17 @@ int main()
 
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
             {
-                if (keyPressed->code == sf::Keyboard::Key::LShift ||
-                    keyPressed->code == sf::Keyboard::Key::RShift)
+                // Enter: play again after winning
+                if (gameWon && keyPressed->code == sf::Keyboard::Key::Enter)
+                {
+                    gameWon = false;
+                    currentLevel = 0;
+                    loadLevel(0);
+                }
+
+                if (!gameWon &&
+                    (keyPressed->code == sf::Keyboard::Key::LShift ||
+                     keyPressed->code == sf::Keyboard::Key::RShift))
                 {
                     // Where would the player appear after the shift?
                     sf::Vector2f p = player.getPosition();
@@ -197,6 +250,14 @@ int main()
                     }
                 }
             }
+        }
+
+        // Win screen: nothing else updates until Enter is pressed
+        if (gameWon)
+        {
+            window.clear(sf::Color(255, 210, 50));
+            window.display();
+            continue;
         }
 
         // Horizontal input
@@ -375,6 +436,17 @@ int main()
         if (nightmare >= 1.f)
             restart();   // the nightmare consumed you
 
+        // ---- 6) Reaching the exit door (top world only) ----
+        if (inTopWorld && overlaps(player.getPosition(), playerSize, goal))
+        {
+            currentLevel++;
+
+            if (currentLevel >= totalLevels)
+                gameWon = true;
+            else
+                loadLevel(currentLevel);
+        }
+
         // Update the bar: width follows the meter, color goes purple -> red
         barFill.setSize({barWidth * nightmare, barHeight});
         barFill.setFillColor(sf::Color(
@@ -393,6 +465,7 @@ int main()
         window.draw(topBackground);
         window.draw(bottomBackground);
         window.draw(middle);
+        window.draw(goal);
 
         for (const auto& o : obstacles)
             window.draw(o.shape);
@@ -412,6 +485,21 @@ int main()
 
         window.draw(barBack);
         window.draw(barFill);
+
+        // Level progress squares
+        for (int i = 0; i < totalLevels; i++)
+        {
+            levelSquare.setPosition({windowWidth - 20.f - (totalLevels - i) * 22.f, 15.f});
+
+            if (i < currentLevel)
+                levelSquare.setFillColor(sf::Color(255, 210, 50));    // completed
+            else if (i == currentLevel)
+                levelSquare.setFillColor(sf::Color::White);           // current
+            else
+                levelSquare.setFillColor(sf::Color(90, 90, 100));     // still ahead
+
+            window.draw(levelSquare);
+        }
 
         window.display();
     }
