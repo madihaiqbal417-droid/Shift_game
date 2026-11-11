@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+enum class GameState { Title, Playing, Won };
+
 struct Obstacle
 {
     sf::RectangleShape shape;
@@ -101,10 +103,10 @@ int main()
     sf::RectangleShape barFill({0.f, barHeight});
     barFill.setPosition({20.f, 15.f});
 
-    // Level progress
+    // Game state and level progress
+    GameState state = GameState::Title;
     const int totalLevels = 3;
     int currentLevel = 0;
-    bool gameWon = false;
 
     const std::string levelNames[totalLevels] = {
         "1: Learn to Shift",
@@ -112,17 +114,55 @@ int main()
         "3: Mind the Gap"
     };
 
-    // Text: level name (top, centered) and controls hint (bottom, centered)
+    // Texts: in-game
     sf::Text levelText(font, "", 14);
     levelText.setFillColor(sf::Color(20, 30, 50));
 
     sf::Text hintText(font, "A/D MOVE   SPACE JUMP   SHIFT SWAP WORLDS", 12);
     hintText.setFillColor(sf::Color(200, 200, 220));
+
+    // Texts: title screen
+    sf::Text titleText(font, "SHIFT", 48);
+    titleText.setFillColor(sf::Color(20, 30, 50));
+
+    sf::Text subtitleText(font, "TWO REALITIES", 20);
+    subtitleText.setFillColor(sf::Color(20, 30, 50));
+
+    sf::Text startText(font, "PRESS ENTER TO START", 14);
+    startText.setFillColor(sf::Color(230, 230, 240));
+
+    sf::Text jamText(font, "GAME OFF 2026", 10);
+    jamText.setFillColor(sf::Color(150, 120, 170));
+
+    // Texts: win screen
+    sf::Text winText(font, "YOU ESCAPED!", 36);
+    winText.setFillColor(sf::Color(60, 40, 0));
+
+    sf::Text thanksText(font, "THANKS FOR PLAYING", 14);
+    thanksText.setFillColor(sf::Color(60, 40, 0));
+
+    sf::Text continueText(font, "PRESS ENTER", 14);
+    continueText.setFillColor(sf::Color(60, 40, 0));
+
+    // Helper: center a text horizontally at height y
+    auto centerText = [&](sf::Text& t, float y)
     {
-        sf::FloatRect hb = hintText.getLocalBounds();
-        hintText.setPosition({(windowWidth - hb.size.x) / 2.f - hb.position.x,
-                              windowHeight - 32.f});
-    }
+        sf::FloatRect b = t.getLocalBounds();
+        t.setPosition({(windowWidth - b.size.x) / 2.f - b.position.x, y});
+    };
+
+    centerText(hintText, windowHeight - 32.f);
+    centerText(titleText, 70.f);
+    centerText(subtitleText, 150.f);
+    centerText(startText, 400.f);
+    centerText(jamText, 560.f);
+    centerText(winText, 200.f);
+    centerText(thanksText, 290.f);
+    centerText(continueText, 400.f);
+
+    // Decorative player circle for the title screen
+    sf::CircleShape deco(playerSize / 2.f);
+    deco.setFillColor(sf::Color::Green);
 
     // Helper: do the player's square and a rectangle overlap?
     auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
@@ -242,52 +282,100 @@ int main()
 
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
             {
-                // Enter: play again after winning
-                if (gameWon && keyPressed->code == sf::Keyboard::Key::Enter)
+                // Title screen: Enter starts a new game
+                if (state == GameState::Title &&
+                    keyPressed->code == sf::Keyboard::Key::Enter)
                 {
-                    gameWon = false;
+                    state = GameState::Playing;
                     currentLevel = 0;
                     loadLevel(0);
                 }
-
-                if (!gameWon &&
-                    (keyPressed->code == sf::Keyboard::Key::LShift ||
-                     keyPressed->code == sf::Keyboard::Key::RShift))
+                // Win screen: Enter returns to the title
+                else if (state == GameState::Won &&
+                         keyPressed->code == sf::Keyboard::Key::Enter)
                 {
-                    // Where would the player appear after the shift?
-                    sf::Vector2f p = player.getPosition();
-                    sf::Vector2f mirrored{p.x, windowHeight - p.y - playerSize};
-                    bool targetTop = !inTopWorld;
-
-                    // Blocked if a solid obstacle already occupies that spot
-                    bool blocked = false;
-                    for (const auto& o : obstacles)
+                    state = GameState::Title;
+                }
+                else if (state == GameState::Playing)
+                {
+                    // Escape: back to the title screen
+                    if (keyPressed->code == sf::Keyboard::Key::Escape)
                     {
-                        if (o.inTopWorld == targetTop && !o.deadly &&
-                            overlaps(mirrored, playerSize, o.shape))
-                        {
-                            blocked = true;
-                        }
+                        state = GameState::Title;
                     }
 
-                    if (!blocked)
+                    // Shift: swap worlds
+                    if (keyPressed->code == sf::Keyboard::Key::LShift ||
+                        keyPressed->code == sf::Keyboard::Key::RShift)
                     {
-                        inTopWorld = targetTop;
-                        player.setPosition(mirrored);
-                        velocity.y = -velocity.y;
-                        dir = inTopWorld ? 1.f : -1.f;
+                        // Where would the player appear after the shift?
+                        sf::Vector2f p = player.getPosition();
+                        sf::Vector2f mirrored{p.x, windowHeight - p.y - playerSize};
+                        bool targetTop = !inTopWorld;
+
+                        // Blocked if a solid obstacle already occupies that spot
+                        bool blocked = false;
+                        for (const auto& o : obstacles)
+                        {
+                            if (o.inTopWorld == targetTop && !o.deadly &&
+                                overlaps(mirrored, playerSize, o.shape))
+                            {
+                                blocked = true;
+                            }
+                        }
+
+                        if (!blocked)
+                        {
+                            inTopWorld = targetTop;
+                            player.setPosition(mirrored);
+                            velocity.y = -velocity.y;
+                            dir = inTopWorld ? 1.f : -1.f;
+                        }
                     }
                 }
             }
         }
 
-        // Win screen: nothing else updates until Enter is pressed
-        if (gameWon)
+        // ---------- Title screen ----------
+        if (state == GameState::Title)
         {
-            window.clear(sf::Color(255, 210, 50));
+            window.clear(sf::Color::Black);
+            window.draw(topBackground);
+            window.draw(bottomBackground);
+            window.draw(middle);
+
+            // The player, standing on top and mirrored underneath
+            deco.setPosition({windowWidth / 2.f - playerSize / 2.f, platformTop - playerSize});
+            window.draw(deco);
+            deco.setPosition({windowWidth / 2.f - playerSize / 2.f, platformBottom});
+            window.draw(deco);
+
+            window.draw(titleText);
+            window.draw(subtitleText);
+
+            if (static_cast<int>(elapsed * 2.f) % 2 == 0)   // blink
+                window.draw(startText);
+
+            window.draw(jamText);
             window.display();
             continue;
         }
+
+        // ---------- Win screen ----------
+        if (state == GameState::Won)
+        {
+            window.clear(sf::Color(255, 210, 50));
+            window.draw(winText);
+            window.draw(thanksText);
+
+            if (static_cast<int>(elapsed * 2.f) % 2 == 0)   // blink
+                window.draw(continueText);
+
+            window.display();
+            continue;
+        }
+
+        // ---------- Playing ----------
 
         // Horizontal input
         float moveX = 0.f;
@@ -471,7 +559,7 @@ int main()
             currentLevel++;
 
             if (currentLevel >= totalLevels)
-                gameWon = true;
+                state = GameState::Won;
             else
                 loadLevel(currentLevel);
         }
@@ -530,12 +618,11 @@ int main()
             window.draw(levelSquare);
         }
 
-            // Level name, centered at the top (only while a real level is active)
+        // Level name, centered at the top (only while a real level is active)
         if (currentLevel < totalLevels)
         {
             levelText.setString(levelNames[currentLevel]);
-            sf::FloatRect lb = levelText.getLocalBounds();
-            levelText.setPosition({(windowWidth - lb.size.x) / 2.f - lb.position.x, 16.f});
+            centerText(levelText, 16.f);
             window.draw(levelText);
         }
 
