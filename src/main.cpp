@@ -1,5 +1,7 @@
 #include <SFML/Graphics.hpp>
 #include <cstdint>
+#include <iostream>
+#include <string>
 #include <vector>
 
 struct Obstacle
@@ -30,6 +32,14 @@ int main()
         "SHIFT - Two Realities"
     );
     window.setKeyRepeatEnabled(false);  // one Shift press = one swap
+
+    // Font (must stay alive as long as any text uses it)
+    sf::Font font;
+    if (!font.openFromFile("assets/PressStart2P-Regular.ttf"))
+    {
+        std::cerr << "Could not load assets/PressStart2P-Regular.ttf\n";
+        return 1;
+    }
 
     // Middle platform (centered, so the two worlds mirror each other)
     const float midY = windowHeight / 2.f;
@@ -96,6 +106,24 @@ int main()
     int currentLevel = 0;
     bool gameWon = false;
 
+    const std::string levelNames[totalLevels] = {
+        "1: Learn to Shift",
+        "2: The Nightmare Below",
+        "3: Mind the Gap"
+    };
+
+    // Text: level name (top, centered) and controls hint (bottom, centered)
+    sf::Text levelText(font, "", 14);
+    levelText.setFillColor(sf::Color(20, 30, 50));
+
+    sf::Text hintText(font, "A/D MOVE   SPACE JUMP   SHIFT SWAP WORLDS", 12);
+    hintText.setFillColor(sf::Color(200, 200, 220));
+    {
+        sf::FloatRect hb = hintText.getLocalBounds();
+        hintText.setPosition({(windowWidth - hb.size.x) / 2.f - hb.position.x,
+                              windowHeight - 32.f});
+    }
+
     // Helper: do the player's square and a rectangle overlap?
     auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
     {
@@ -156,9 +184,10 @@ int main()
 
         if (index == 0)
         {
-            // Level 1: learn to shift. The pillar is too tall to jump over.
+            // Level 1: learn to shift. The wall is too tall to jump over,
+            // and it is solid (not deadly), so exploring is safe.
             nightmareFillTime = 8.f;
-            addObstacle(true, true, 380.f, 40.f, 220.f);
+            addObstacle(true, false, 380.f, 40.f, 220.f);
         }
         else if (index == 1)
         {
@@ -500,6 +529,19 @@ int main()
 
             window.draw(levelSquare);
         }
+
+            // Level name, centered at the top (only while a real level is active)
+        if (currentLevel < totalLevels)
+        {
+            levelText.setString(levelNames[currentLevel]);
+            sf::FloatRect lb = levelText.getLocalBounds();
+            levelText.setPosition({(windowWidth - lb.size.x) / 2.f - lb.position.x, 16.f});
+            window.draw(levelText);
+        }
+
+        // Controls hint, only on the first level
+        if (currentLevel == 0)
+            window.draw(hintText);
 
         window.display();
     }
