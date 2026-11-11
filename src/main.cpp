@@ -1,3 +1,4 @@
+#include <SFML/Audio.hpp>
 #include <SFML/Graphics.hpp>
 #include <cstdint>
 #include <iostream>
@@ -42,6 +43,37 @@ int main()
         std::cerr << "Could not load assets/PressStart2P-Regular.ttf\n";
         return 1;
     }
+
+    // Sound effects (buffers must stay alive as long as their sounds)
+    sf::SoundBuffer jumpBuffer;
+    sf::SoundBuffer shiftBuffer;
+    sf::SoundBuffer deathBuffer;
+    sf::SoundBuffer winBuffer;
+
+  if (!jumpBuffer.loadFromFile("assets/jump.wav"))
+    std::cout << "Failed: jump.wav\n";
+else
+    std::cout << "Loaded: jump.wav\n";
+
+if (!shiftBuffer.loadFromFile("assets/shift.wav"))
+    std::cout << "Failed: shift.wav\n";
+else
+    std::cout << "Loaded: shift.wav\n";
+
+if (!deathBuffer.loadFromFile("assets/death.wav"))
+    std::cout << "Failed: death.wav\n";
+else
+    std::cout << "Loaded: death.wav\n";
+
+if (!winBuffer.loadFromFile("assets/win.wav"))
+    std::cout << "Failed: win.wav\n";
+else
+    std::cout << "Loaded: win.wav\n";
+
+    sf::Sound jumpSound(jumpBuffer);
+    sf::Sound shiftSound(shiftBuffer);
+    sf::Sound deathSound(deathBuffer);
+    sf::Sound winSound(winBuffer);
 
     // Middle platform (centered, so the two worlds mirror each other)
     const float midY = windowHeight / 2.f;
@@ -173,7 +205,7 @@ int main()
                p.y < rp.y + rs.y && p.y + size > rp.y;
     };
 
-    // Helper: send the player back to the start
+    // Helper: send the player back to the start (silent)
     auto restart = [&]()
     {
         player.setPosition(startPos);
@@ -181,6 +213,13 @@ int main()
         inTopWorld = true;
         onGround = false;
         nightmare = 0.f;
+    };
+
+    // Helper: the player dies (sound + restart)
+    auto die = [&]()
+    {
+        deathSound.play();
+        restart();
     };
 
     // Obstacles
@@ -330,6 +369,7 @@ int main()
                             player.setPosition(mirrored);
                             velocity.y = -velocity.y;
                             dir = inTopWorld ? 1.f : -1.f;
+                            shiftSound.play();
                         }
                     }
                 }
@@ -398,6 +438,7 @@ int main()
         {
             velocity.y = jumpSpeed * dir;
             onGround = false;
+            jumpSound.play();
         }
 
         velocity.x = moveX * speed;
@@ -501,7 +542,7 @@ int main()
 
             if (overlaps({pos.x + 4.f, pos.y + 4.f}, playerSize - 8.f, o.shape))
             {
-                restart();
+                die();
                 break;
             }
         }
@@ -535,7 +576,7 @@ int main()
             {
                 if (overlaps({p.x + 4.f, p.y + 4.f}, playerSize - 8.f, m.body))
                 {
-                    restart();
+                    die();
                     break;
                 }
             }
@@ -551,11 +592,12 @@ int main()
             nightmare = 0.f;
 
         if (nightmare >= 1.f)
-            restart();   // the nightmare consumed you
+            die();   // the nightmare consumed you
 
         // ---- 6) Reaching the exit door (top world only) ----
         if (inTopWorld && overlaps(player.getPosition(), playerSize, goal))
         {
+            winSound.play();
             currentLevel++;
 
             if (currentLevel >= totalLevels)

@@ -1,2 +1,7 @@
 build/
 .vscode/
+
+build/
+build-release/
+dist/
+.vscode/
