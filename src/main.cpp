@@ -1,8 +1,10 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Graphics.hpp>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,14 @@ struct Monster
     float direction;  // +1 = moving right, -1 = moving left
 };
 
+struct Particle
+{
+    sf::RectangleShape shape;
+    sf::Vector2f velocity;
+    float lifetime;   // remaining time in seconds
+    float maxLife;    // total time in seconds
+};
+
 int main()
 {
     const float windowWidth = 800.f;
@@ -36,6 +46,34 @@ int main()
         "SHIFT - Two Realities"
     );
     window.setKeyRepeatEnabled(false);  // one Shift press = one swap
+
+    // Random number generator for particles
+    std::mt19937 rng(std::random_device{}());
+    auto randomFloat = [&](float min, float max) {
+        return std::uniform_real_distribution<float>(min, max)(rng);
+    };
+
+    // Particles and Visual Effects
+    std::vector<Particle> particles;
+    float flashAlpha = 0.f;
+
+    auto emitParticles = [&](sf::Vector2f pos, sf::Color color, int count, float speed) {
+        for (int i = 0; i < count; ++i) {
+            Particle p;
+            float size = randomFloat(4.f, 8.f);
+            p.shape.setSize({size, size});
+            p.shape.setPosition(pos);
+            p.shape.setFillColor(color);
+
+            float angle = randomFloat(0.f, 2.f * 3.14159f);
+            float s = randomFloat(speed * 0.5f, speed * 1.5f);
+            p.velocity = {std::cos(angle) * s, std::sin(angle) * s};
+
+            p.maxLife = randomFloat(0.4f, 0.8f);
+            p.lifetime = p.maxLife;
+            particles.push_back(p);
+        }
+    };
 
     // Font (must stay alive as long as any text uses it)
     sf::Font font;
@@ -239,6 +277,7 @@ int main()
     // Helper: the player dies (sound + restart)
     auto die = [&]()
     {
+        emitParticles(player.getPosition() + sf::Vector2f(playerSize/2, playerSize/2), sf::Color::Green, 20, 200.f);
         deathSound.play();
         restart();
     };
@@ -409,6 +448,11 @@ int main()
                             velocity.y = -velocity.y;
                             dir = inTopWorld ? 1.f : -1.f;
                             shiftSound.play();
+
+                            // Effects
+                            flashAlpha = 180.f;
+                            emitParticles(player.getPosition() + sf::Vector2f(playerSize/2, playerSize/2),
+                                          inTopWorld ? sf::Color::White : sf::Color(150, 50, 200), 15, 150.f);
                         }
                     }
                 }
@@ -456,6 +500,25 @@ int main()
 
         // ---------- Playing ----------
 
+        // Update effects
+        if (flashAlpha > 0.f)
+            flashAlpha = std::max(0.f, flashAlpha - 800.f * dt);
+
+        for (auto it = particles.begin(); it != particles.end(); )
+        {
+            it->lifetime -= dt;
+            if (it->lifetime <= 0.f) {
+                it = particles.erase(it);
+            } else {
+                it->shape.move(it->velocity * dt);
+                // Fade out
+                sf::Color c = it->shape.getFillColor();
+                c.a = static_cast<std::uint8_t>(255.f * (it->lifetime / it->maxLife));
+                it->shape.setFillColor(c);
+                ++it;
+            }
+        }
+
         // Music crossfade: slide musicMix toward 0 (top world) or 1 (bottom world)
         float mixTarget = inTopWorld ? 0.f : 1.f;
         float mixStep = 3.f * dt;   // full fade in about a third of a second
@@ -490,6 +553,12 @@ int main()
             velocity.y = jumpSpeed * dir;
             onGround = false;
             jumpSound.play();
+
+            // Emit dust particles at the feet
+            sf::Vector2f ppos = player.getPosition();
+            float feetY = inTopWorld ? ppos.y + playerSize : ppos.y;
+            emitParticles(sf::Vector2f(ppos.x + playerSize / 2.f, feetY),
+                          sf::Color(200, 200, 200, 150), 8, 80.f);
         }
 
         velocity.x = moveX * speed;
@@ -675,6 +744,14 @@ int main()
                         static_cast<int>(elapsed * 6.f) % 2 == 0;
         barBack.setOutlineColor(blinkRed ? sf::Color(255, 60, 60) : sf::Color::White);
 
+        // Dynamic nightmare background (darkens/reddens as nightmare increases)
+        sf::Color bottomColor(
+            static_cast<std::uint8_t>(40.f + 60.f * nightmare),
+            static_cast<std::uint8_t>(10.f * (1.f - nightmare)),
+            static_cast<std::uint8_t>(30.f * (1.f - nightmare))
+        );
+        bottomBackground.setFillColor(bottomColor);
+
         // Draw
         window.clear(sf::Color::Black);
         window.draw(topBackground);
@@ -696,7 +773,19 @@ int main()
             window.draw(eye);
         }
 
+        // Draw particles
+        for (const auto& p : particles)
+            window.draw(p.shape);
+
         window.draw(player);
+
+        // Shift Flash Effect Overlay
+        if (flashAlpha > 0.f)
+        {
+            sf::RectangleShape flashOverlay({windowWidth, windowHeight});
+            flashOverlay.setFillColor(sf::Color(255, 255, 255, static_cast<std::uint8_t>(flashAlpha)));
+            window.draw(flashOverlay);
+        }
 
         window.draw(barBack);
         window.draw(barFill);
