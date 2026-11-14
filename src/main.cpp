@@ -19,7 +19,7 @@ struct Obstacle
 
 struct Monster
 {
-    sf::RectangleShape body;
+    sf::RectangleShape body;   // invisible: used for position and collisions
     float minX;       // leftmost position of the monster's left edge
     float maxX;       // rightmost position of the monster's left edge
     float speed;      // pixels per second
@@ -32,6 +32,12 @@ struct Particle
     sf::Vector2f velocity;
     float lifetime;   // remaining time in seconds
     float maxLife;    // total time in seconds
+};
+
+struct Cloud
+{
+    sf::Sprite sprite;
+    float speed;      // pixels per second, drifting to the right
 };
 
 int main()
@@ -53,7 +59,7 @@ int main()
         return std::uniform_real_distribution<float>(min, max)(rng);
     };
 
-    // Particles and Visual Effects
+    // Particles and visual effects
     std::vector<Particle> particles;
 
     auto emitParticles = [&](sf::Vector2f pos, sf::Color color, int count, float speed) {
@@ -81,6 +87,31 @@ int main()
         std::cerr << "Could not load assets/PressStart2P-Regular.ttf\n";
         return 1;
     }
+
+    // Textures (must stay alive as long as any sprite uses them)
+    sf::Texture playerTexture;
+    sf::Texture monsterTexture;
+    sf::Texture cloudBigTexture;
+    sf::Texture cloudSmallTexture;
+
+    if (!playerTexture.loadFromFile("assets/player.png") ||
+        !monsterTexture.loadFromFile("assets/monster.png") ||
+        !cloudBigTexture.loadFromFile("assets/cloud_big.png") ||
+        !cloudSmallTexture.loadFromFile("assets/cloud_small.png"))
+    {
+        std::cerr << "Could not load an image from the assets folder "
+                     "(player.png, monster.png, cloud_big.png, cloud_small.png)\n";
+        return 1;
+    }
+
+    // Sprites for the player and the monsters (origin = center, so flips stay in place)
+    sf::Sprite playerSprite(playerTexture);
+    playerSprite.setOrigin({playerSize / 2.f, playerSize / 2.f});
+
+    sf::Sprite monsterSprite(monsterTexture);
+    monsterSprite.setOrigin({monsterSize / 2.f, monsterSize / 2.f});
+
+    float facing = 1.f;   // +1 = looking right, -1 = looking left
 
     // Sound effects (buffers must stay alive as long as their sounds)
     sf::SoundBuffer jumpBuffer;
@@ -130,7 +161,7 @@ int main()
     calmMusic.setLooping(true);
     nightmareMusic.setLooping(true);
 
-    const float musicVolume = 90.f;   // 0 to 100   // 0 to 100
+    const float musicVolume = 90.f;   // 0 to 100
     float musicMix = 0.f;             // 0 = calm only, 1 = nightmare only
 
     // Middle platform (centered, so the two worlds mirror each other)
@@ -152,6 +183,37 @@ int main()
     bottomBackground.setPosition({0.f, platformBottom});
     bottomBackground.setFillColor(sf::Color(40, 10, 30));    // nightmare
 
+    // Clouds drifting across the sky (top world only)
+    std::vector<Cloud> clouds;
+
+    // addCloud(texture, x, y, speed)
+    auto addCloud = [&](const sf::Texture& tex, float x, float y, float cloudSpeed)
+    {
+        Cloud c{sf::Sprite(tex), cloudSpeed};
+        c.sprite.setPosition({x, y});
+        c.sprite.setColor(sf::Color(255, 255, 255, 235));
+        clouds.push_back(c);
+    };
+
+    addCloud(cloudBigTexture,    60.f,  70.f, 12.f);
+    addCloud(cloudSmallTexture, 330.f,  45.f, 20.f);
+    addCloud(cloudBigTexture,   560.f, 130.f,  9.f);
+    addCloud(cloudSmallTexture, 700.f,  95.f, 16.f);
+    addCloud(cloudSmallTexture, 180.f, 170.f, 14.f);
+
+    // Move the clouds; when one leaves the right edge, bring it back on the left
+    auto updateClouds = [&](float dtSeconds)
+    {
+        for (auto& c : clouds)
+        {
+            c.sprite.move({c.speed * dtSeconds, 0.f});
+
+            float w = c.sprite.getGlobalBounds().size.x;
+            if (c.sprite.getPosition().x > windowWidth)
+                c.sprite.setPosition({-w, c.sprite.getPosition().y});
+        }
+    };
+
     // Exit door (top world, right edge)
     sf::RectangleShape goal({40.f, 60.f});
     goal.setPosition({740.f, platformTop - 60.f});
@@ -159,7 +221,8 @@ int main()
     goal.setOutlineThickness(2.f);
     goal.setOutlineColor(sf::Color(255, 250, 200));
 
-    // Player
+    // Player (this shape is invisible: it only holds the position;
+    // the sprite is drawn on top of it)
     const sf::Vector2f startPos{60.f, platformTop - playerSize};
     sf::CircleShape player(playerSize / 2.f);
     player.setFillColor(sf::Color::Green);
@@ -250,10 +313,6 @@ int main()
     centerText(thanksText, 290.f);
     centerText(continueText, 400.f);
 
-    // Decorative player circle for the title screen
-    sf::CircleShape deco(playerSize / 2.f);
-    deco.setFillColor(sf::Color::Green);
-
     // Helper: do the player's square and a rectangle overlap?
     auto overlaps = [](sf::Vector2f p, float size, const sf::RectangleShape& r)
     {
@@ -271,11 +330,16 @@ int main()
         inTopWorld = true;
         onGround = false;
         nightmare = 0.f;
+        facing = 1.f;
     };
 
-    // Helper: the player dies (sound + restart)
+    // Helper: the player dies (red burst + sound + restart)
     auto die = [&]()
     {
+        sf::Vector2f p = player.getPosition();
+        emitParticles(sf::Vector2f(p.x + playerSize / 2.f, p.y + playerSize / 2.f),
+                      sf::Color(255, 80, 80), 25, 220.f);
+
         deathSound.play();
         restart();
     };
@@ -368,10 +432,6 @@ int main()
 
     loadLevel(0);
 
-    // Monster eyes (one shape reused for all monsters)
-    sf::CircleShape eye(4.f);
-    eye.setFillColor(sf::Color(255, 230, 80));
-
     // Level progress squares (top-right corner)
     sf::RectangleShape levelSquare({14.f, 14.f});
 
@@ -401,6 +461,7 @@ int main()
                 {
                     state = GameState::Playing;
                     currentLevel = 0;
+                    particles.clear();
                     loadLevel(0);
                     startMusic();
                 }
@@ -448,8 +509,10 @@ int main()
                             shiftSound.play();
 
                             // Effects
-                            emitParticles(sf::Vector2f(player.getPosition().x + playerSize/2.f, player.getPosition().y + playerSize/2.f),
-                                          inTopWorld ? sf::Color::White : sf::Color(150, 50, 200), 15, 150.f);
+                            emitParticles(sf::Vector2f(player.getPosition().x + playerSize / 2.f,
+                                                       player.getPosition().y + playerSize / 2.f),
+                                          inTopWorld ? sf::Color::White : sf::Color(150, 50, 200),
+                                          15, 150.f);
                         }
                     }
                 }
@@ -459,16 +522,28 @@ int main()
         // ---------- Title screen ----------
         if (state == GameState::Title)
         {
+            // Reset the bottom color (the meter tint only applies while playing)
+            bottomBackground.setFillColor(sf::Color(40, 10, 30));
+
+            updateClouds(dt);
+
             window.clear(sf::Color::Black);
             window.draw(topBackground);
+
+            for (const auto& c : clouds)
+                window.draw(c.sprite);
+
             window.draw(bottomBackground);
             window.draw(middle);
 
             // The player, standing on top and mirrored underneath
-            deco.setPosition({windowWidth / 2.f - playerSize / 2.f, platformTop - playerSize});
-            window.draw(deco);
-            deco.setPosition({windowWidth / 2.f - playerSize / 2.f, platformBottom});
-            window.draw(deco);
+            playerSprite.setScale({1.f, 1.f});
+            playerSprite.setPosition({windowWidth / 2.f, platformTop - playerSize / 2.f});
+            window.draw(playerSprite);
+
+            playerSprite.setScale({1.f, -1.f});
+            playerSprite.setPosition({windowWidth / 2.f, platformBottom + playerSize / 2.f});
+            window.draw(playerSprite);
 
             window.draw(titleText);
             window.draw(subtitleText);
@@ -497,14 +572,20 @@ int main()
 
         // ---------- Playing ----------
 
+        updateClouds(dt);
+
+        // Update particles: move them, fade them out, remove the dead ones
         for (auto it = particles.begin(); it != particles.end(); )
         {
             it->lifetime -= dt;
-            if (it->lifetime <= 0.f) {
+            if (it->lifetime <= 0.f)
+            {
                 it = particles.erase(it);
-            } else {
+            }
+            else
+            {
                 it->shape.move(it->velocity * dt);
-                // Fade out
+
                 sf::Color c = it->shape.getFillColor();
                 c.a = static_cast<std::uint8_t>(255.f * (it->lifetime / it->maxLife));
                 it->shape.setFillColor(c);
@@ -535,6 +616,12 @@ int main()
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
             moveX += 1.f;
 
+        // Remember which way the player is facing (for the sprite)
+        if (moveX > 0.f)
+            facing = 1.f;
+        else if (moveX < 0.f)
+            facing = -1.f;
+
         // Jump input (jump direction flips with gravity)
         bool jumpPressed =
             sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space) ||
@@ -547,7 +634,7 @@ int main()
             onGround = false;
             jumpSound.play();
 
-            // Emit dust particles at the feet
+            // Dust particles at the feet
             sf::Vector2f ppos = player.getPosition();
             float feetY = inTopWorld ? ppos.y + playerSize : ppos.y;
             emitParticles(sf::Vector2f(ppos.x + playerSize / 2.f, feetY),
@@ -737,7 +824,7 @@ int main()
                         static_cast<int>(elapsed * 6.f) % 2 == 0;
         barBack.setOutlineColor(blinkRed ? sf::Color(255, 60, 60) : sf::Color::White);
 
-        // Dynamic nightmare background (darkens/reddens as nightmare increases)
+        // Dynamic nightmare background (reddens as the meter fills)
         sf::Color bottomColor(
             static_cast<std::uint8_t>(40.f + 60.f * nightmare),
             static_cast<std::uint8_t>(10.f * (1.f - nightmare)),
@@ -748,6 +835,11 @@ int main()
         // Draw
         window.clear(sf::Color::Black);
         window.draw(topBackground);
+
+        // Clouds go right after the sky so everything else is in front of them
+        for (const auto& c : clouds)
+            window.draw(c.sprite);
+
         window.draw(bottomBackground);
         window.draw(middle);
         window.draw(goal);
@@ -755,22 +847,26 @@ int main()
         for (const auto& o : obstacles)
             window.draw(o.shape);
 
+        // Monsters: upside down (they hang from the platform), gently "breathing"
         for (const auto& m : monsters)
         {
-            window.draw(m.body);
-
             sf::Vector2f mp = m.body.getPosition();
-            eye.setPosition({mp.x + 8.f, mp.y + 18.f});
-            window.draw(eye);
-            eye.setPosition({mp.x + 24.f, mp.y + 18.f});
-            window.draw(eye);
+            float breathe = 1.f + 0.05f * std::sin(elapsed * 6.f + mp.x * 0.05f);
+
+            monsterSprite.setPosition({mp.x + monsterSize / 2.f, mp.y + monsterSize / 2.f});
+            monsterSprite.setScale({1.f, -breathe});
+            window.draw(monsterSprite);
         }
 
-        // Draw particles
+        // Particles
         for (const auto& p : particles)
             window.draw(p.shape);
 
-        window.draw(player);
+        // Player: faces the way it walks, upside down in the bottom world
+        sf::Vector2f pp = player.getPosition();
+        playerSprite.setPosition({pp.x + playerSize / 2.f, pp.y + playerSize / 2.f});
+        playerSprite.setScale({facing, inTopWorld ? 1.f : -1.f});
+        window.draw(playerSprite);
 
         window.draw(barBack);
         window.draw(barFill);
