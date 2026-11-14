@@ -55,7 +55,6 @@ int main()
 
     // Particles and Visual Effects
     std::vector<Particle> particles;
-    float flashAlpha = 0.f;
 
     auto emitParticles = [&](sf::Vector2f pos, sf::Color color, int count, float speed) {
         for (int i = 0; i < count; ++i) {
@@ -277,7 +276,6 @@ int main()
     // Helper: the player dies (sound + restart)
     auto die = [&]()
     {
-        emitParticles(player.getPosition() + sf::Vector2f(playerSize/2, playerSize/2), sf::Color::Green, 20, 200.f);
         deathSound.play();
         restart();
     };
@@ -450,8 +448,7 @@ int main()
                             shiftSound.play();
 
                             // Effects
-                            flashAlpha = 180.f;
-                            emitParticles(player.getPosition() + sf::Vector2f(playerSize/2, playerSize/2),
+                            emitParticles(sf::Vector2f(player.getPosition().x + playerSize/2.f, player.getPosition().y + playerSize/2.f),
                                           inTopWorld ? sf::Color::White : sf::Color(150, 50, 200), 15, 150.f);
                         }
                     }
@@ -499,10 +496,6 @@ int main()
         }
 
         // ---------- Playing ----------
-
-        // Update effects
-        if (flashAlpha > 0.f)
-            flashAlpha = std::max(0.f, flashAlpha - 800.f * dt);
 
         for (auto it = particles.begin(); it != particles.end(); )
         {
@@ -778,14 +771,6 @@ int main()
             window.draw(p.shape);
 
         window.draw(player);
-
-        // Shift Flash Effect Overlay
-        if (flashAlpha > 0.f)
-        {
-            sf::RectangleShape flashOverlay({windowWidth, windowHeight});
-            flashOverlay.setFillColor(sf::Color(255, 255, 255, static_cast<std::uint8_t>(flashAlpha)));
-            window.draw(flashOverlay);
-        }
 
         window.draw(barBack);
         window.draw(barFill);
