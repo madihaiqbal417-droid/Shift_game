@@ -1,5 +1,6 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Graphics.hpp>
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -50,30 +51,50 @@ int main()
     sf::SoundBuffer deathBuffer;
     sf::SoundBuffer winBuffer;
 
-  if (!jumpBuffer.loadFromFile("assets/jump.wav"))
-    std::cout << "Failed: jump.wav\n";
-else
-    std::cout << "Loaded: jump.wav\n";
+    if (!jumpBuffer.loadFromFile("assets/jump.wav"))
+        std::cout << "Failed: jump.wav\n";
+    else
+        std::cout << "Loaded: jump.wav\n";
 
-if (!shiftBuffer.loadFromFile("assets/shift.wav"))
-    std::cout << "Failed: shift.wav\n";
-else
-    std::cout << "Loaded: shift.wav\n";
+    if (!shiftBuffer.loadFromFile("assets/shift.wav"))
+        std::cout << "Failed: shift.wav\n";
+    else
+        std::cout << "Loaded: shift.wav\n";
 
-if (!deathBuffer.loadFromFile("assets/death.wav"))
-    std::cout << "Failed: death.wav\n";
-else
-    std::cout << "Loaded: death.wav\n";
+    if (!deathBuffer.loadFromFile("assets/death.wav"))
+        std::cout << "Failed: death.wav\n";
+    else
+        std::cout << "Loaded: death.wav\n";
 
-if (!winBuffer.loadFromFile("assets/win.wav"))
-    std::cout << "Failed: win.wav\n";
-else
-    std::cout << "Loaded: win.wav\n";
+    if (!winBuffer.loadFromFile("assets/win.wav"))
+        std::cout << "Failed: win.wav\n";
+    else
+        std::cout << "Loaded: win.wav\n";
 
     sf::Sound jumpSound(jumpBuffer);
     sf::Sound shiftSound(shiftBuffer);
     sf::Sound deathSound(deathBuffer);
     sf::Sound winSound(winBuffer);
+
+    jumpSound.setVolume(30.f);
+    shiftSound.setVolume(30.f);
+    deathSound.setVolume(30.f);
+    winSound.setVolume(40.f);
+
+    // Music: two loops play at the same time and we crossfade between them
+    sf::Music calmMusic;
+    sf::Music nightmareMusic;
+
+    if (!calmMusic.openFromFile("assets/music_calm.wav"))
+        std::cout << "Failed: music_calm.wav\n";
+    if (!nightmareMusic.openFromFile("assets/music_nightmare.wav"))
+        std::cout << "Failed: music_nightmare.wav\n";
+
+    calmMusic.setLooping(true);
+    nightmareMusic.setLooping(true);
+
+    const float musicVolume = 90.f;   // 0 to 100   // 0 to 100
+    float musicMix = 0.f;             // 0 = calm only, 1 = nightmare only
 
     // Middle platform (centered, so the two worlds mirror each other)
     const float midY = windowHeight / 2.f;
@@ -222,6 +243,22 @@ else
         restart();
     };
 
+    // Helpers: start and stop the music
+    auto startMusic = [&]()
+    {
+        musicMix = 0.f;
+        calmMusic.setVolume(musicVolume);
+        nightmareMusic.setVolume(0.f);
+        calmMusic.play();
+        nightmareMusic.play();
+    };
+
+    auto stopMusic = [&]()
+    {
+        calmMusic.stop();
+        nightmareMusic.stop();
+    };
+
     // Obstacles
     std::vector<Obstacle> obstacles;
 
@@ -328,6 +365,7 @@ else
                     state = GameState::Playing;
                     currentLevel = 0;
                     loadLevel(0);
+                    startMusic();
                 }
                 // Win screen: Enter returns to the title
                 else if (state == GameState::Won &&
@@ -341,6 +379,7 @@ else
                     if (keyPressed->code == sf::Keyboard::Key::Escape)
                     {
                         state = GameState::Title;
+                        stopMusic();
                     }
 
                     // Shift: swap worlds
@@ -416,6 +455,18 @@ else
         }
 
         // ---------- Playing ----------
+
+        // Music crossfade: slide musicMix toward 0 (top world) or 1 (bottom world)
+        float mixTarget = inTopWorld ? 0.f : 1.f;
+        float mixStep = 3.f * dt;   // full fade in about a third of a second
+
+        if (musicMix < mixTarget)
+            musicMix = std::min(mixTarget, musicMix + mixStep);
+        else if (musicMix > mixTarget)
+            musicMix = std::max(mixTarget, musicMix - mixStep);
+
+        calmMusic.setVolume(musicVolume * (1.f - musicMix));
+        nightmareMusic.setVolume(musicVolume * musicMix);
 
         // Horizontal input
         float moveX = 0.f;
@@ -601,9 +652,14 @@ else
             currentLevel++;
 
             if (currentLevel >= totalLevels)
+            {
                 state = GameState::Won;
+                stopMusic();
+            }
             else
+            {
                 loadLevel(currentLevel);
+            }
         }
 
         // Update the bar: width follows the meter, color goes purple -> red
