@@ -88,21 +88,35 @@ int main()
         return 1;
     }
 
-    // Textures (must stay alive as long as any sprite uses them)
+    // Textures (must stay alive as long as any sprite or shape uses them)
     sf::Texture playerTexture;
     sf::Texture monsterTexture;
     sf::Texture cloudBigTexture;
     sf::Texture cloudSmallTexture;
+    sf::Texture platformTexture;
+    sf::Texture brickLightTexture;
+    sf::Texture brickDarkTexture;
+    sf::Texture doorTexture;
 
     if (!playerTexture.loadFromFile("assets/player.png") ||
         !monsterTexture.loadFromFile("assets/monster.png") ||
         !cloudBigTexture.loadFromFile("assets/cloud_big.png") ||
-        !cloudSmallTexture.loadFromFile("assets/cloud_small.png"))
+        !cloudSmallTexture.loadFromFile("assets/cloud_small.png") ||
+        !platformTexture.loadFromFile("assets/platform.png") ||
+        !brickLightTexture.loadFromFile("assets/brick_light.png") ||
+        !brickDarkTexture.loadFromFile("assets/brick_dark.png") ||
+        !doorTexture.loadFromFile("assets/door.png"))
     {
         std::cerr << "Could not load an image from the assets folder "
-                     "(player.png, monster.png, cloud_big.png, cloud_small.png)\n";
+                     "(player, monster, cloud_big, cloud_small, platform, "
+                     "brick_light, brick_dark, door - all .png)\n";
         return 1;
     }
+
+    // These tiles repeat to fill a larger shape
+    platformTexture.setRepeated(true);
+    brickLightTexture.setRepeated(true);
+    brickDarkTexture.setRepeated(true);
 
     // Sprites for the player and the monsters (origin = center, so flips stay in place)
     sf::Sprite playerSprite(playerTexture);
@@ -164,7 +178,8 @@ int main()
     const float musicVolume = 90.f;   // 0 to 100
     float musicMix = 0.f;             // 0 = calm only, 1 = nightmare only
 
-    // Middle platform (centered, so the two worlds mirror each other)
+    // Middle platform (centered, so the two worlds mirror each other).
+    // It is drawn with a tiled texture: grass on top, a dark underside below.
     const float midY = windowHeight / 2.f;
     const float midThickness = 20.f;
     const float platformTop = midY - midThickness / 2.f;     // 290
@@ -172,7 +187,9 @@ int main()
 
     sf::RectangleShape middle({windowWidth, midThickness});
     middle.setPosition({0.f, platformTop});
-    middle.setFillColor(sf::Color(200, 200, 200));
+    middle.setTexture(&platformTexture, true);
+    middle.setTextureRect(sf::IntRect({0, 0},
+        {static_cast<int>(windowWidth), static_cast<int>(midThickness)}));
 
     // Backgrounds for the two worlds
     sf::RectangleShape topBackground({windowWidth, platformTop});
@@ -214,12 +231,10 @@ int main()
         }
     };
 
-    // Exit door (top world, right edge)
+    // Exit door (top world, right edge), drawn with the door image
     sf::RectangleShape goal({40.f, 60.f});
     goal.setPosition({740.f, platformTop - 60.f});
-    goal.setFillColor(sf::Color(255, 210, 50));
-    goal.setOutlineThickness(2.f);
-    goal.setOutlineColor(sf::Color(255, 250, 200));
+    goal.setTexture(&doorTexture, true);
 
     // Player (this shape is invisible: it only holds the position;
     // the sprite is drawn on top of it)
@@ -258,13 +273,18 @@ int main()
 
     // Game state and level progress
     GameState state = GameState::Title;
-    const int totalLevels = 3;
+    const int totalLevels = 6;
     int currentLevel = 0;
 
+    // Keep names at 22 characters or fewer so they fit between the meter
+    // bar and the progress squares.
     const std::string levelNames[totalLevels] = {
         "1: Learn to Shift",
         "2: The Nightmare Below",
-        "3: Mind the Gap"
+        "3: Mind the Gap",
+        "4: Zigzag",
+        "5: Timing Is Key",
+        "6: The Long Way Down"
     };
 
     // Texts: in-game
@@ -364,6 +384,7 @@ int main()
     std::vector<Obstacle> obstacles;
 
     // addObstacle(inTopWorld, deadly, x, width, height)
+    // Solid obstacles are drawn with a brick texture; deadly ones as spikes.
     auto addObstacle = [&](bool topWorld, bool deadly, float x, float width, float height)
     {
         Obstacle o{sf::RectangleShape({width, height}), topWorld, deadly};
@@ -371,11 +392,18 @@ int main()
         o.shape.setPosition({x, y});
 
         if (deadly)
-            o.shape.setFillColor(sf::Color(200, 40, 40));
-        else if (topWorld)
-            o.shape.setFillColor(sf::Color(120, 90, 60));
+        {
+            o.shape.setFillColor(sf::Color(200, 40, 40));   // not drawn: spikes are
+        }
         else
-            o.shape.setFillColor(sf::Color(110, 60, 120));
+        {
+            o.shape.setTexture(topWorld ? &brickLightTexture : &brickDarkTexture, true);
+            o.shape.setTextureRect(sf::IntRect({0, 0},
+                {static_cast<int>(width), static_cast<int>(height)}));
+            o.shape.setOutlineThickness(-2.f);
+            o.shape.setOutlineColor(topWorld ? sf::Color(40, 25, 15)
+                                             : sf::Color(25, 10, 35));
+        }
 
         obstacles.push_back(o);
     };
@@ -416,7 +444,7 @@ int main()
             addMonster(250.f, 240.f, 320.f, 70.f);
             addMonster(460.f, 440.f, 500.f, 80.f);
         }
-        else
+        else if (index == 2)
         {
             // Level 3: go under the first strip, land in the gap, jump the second
             nightmareFillTime = 8.f;
@@ -426,11 +454,52 @@ int main()
             addMonster(200.f, 190.f, 260.f, 80.f);
             addMonster(370.f, 350.f, 420.f, 100.f);
         }
+        else if (index == 3)
+        {
+            // Level 4: zigzag. Walls alternate between the worlds, so you
+            // have to chain shifts: down, up, down, up.
+            nightmareFillTime = 6.f;
+            addObstacle(true,  false, 180.f, 40.f, 200.f);   // top wall: dive before it
+            addObstacle(false, false, 330.f, 40.f, 200.f);   // bottom wall: surface before it
+            addObstacle(true,  true,  380.f, 50.f,  30.f);   // top spikes: jump them
+            addObstacle(true,  false, 500.f, 40.f, 200.f);   // top wall: dive again
+            addObstacle(false, false, 650.f, 40.f, 200.f);   // bottom wall: surface again
+            addObstacle(true,  true,  680.f, 30.f,  30.f);   // last spikes before the door
+        }
+        else if (index == 4)
+        {
+            // Level 5: timing. Monsters guard the spots where you must surface.
+            nightmareFillTime = 5.5f;
+            addObstacle(true,  false, 160.f, 40.f, 210.f);   // top wall
+            addObstacle(false, false, 360.f, 40.f, 200.f);   // bottom wall (stops you skipping the top)
+            addObstacle(true,  true,  390.f, 60.f,  30.f);   // top spikes
+            addObstacle(true,  false, 510.f, 40.f, 210.f);   // top wall
+            addObstacle(true,  true,  660.f, 60.f,  30.f);   // spikes before the door
+            addMonster(230.f, 200.f, 260.f,  90.f);          // guards the first surfacing spot
+            addMonster(660.f, 640.f, 700.f, 110.f);          // guards the second one
+        }
+        else
+        {
+            // Level 6: one spike strip too wide to jump, a monster gauntlet
+            // underneath it, and a short meter.
+            nightmareFillTime = 4.5f;
+            addObstacle(true,  true,  160.f, 320.f, 30.f);   // top: unjumpable strip, go under
+            addObstacle(false, false, 580.f,  40.f, 200.f);  // bottom wall: surface before it
+            addObstacle(true,  true,  660.f,  30.f, 30.f);   // top: last hop before the door
+            addMonster(200.f, 200.f, 250.f, 110.f);
+            addMonster(380.f, 370.f, 420.f, 100.f);
+        }
 
         restart();
     };
 
     loadLevel(0);
+
+    // One triangle, reused to draw every spike
+    sf::ConvexShape spike(3);
+    spike.setFillColor(sf::Color(215, 50, 50));
+    spike.setOutlineThickness(1.5f);
+    spike.setOutlineColor(sf::Color(120, 15, 25));
 
     // Level progress squares (top-right corner)
     sf::RectangleShape levelSquare({14.f, 14.f});
@@ -844,8 +913,33 @@ int main()
         window.draw(middle);
         window.draw(goal);
 
+        // Obstacles: solid ones are brick rectangles, deadly ones are rows of spikes
         for (const auto& o : obstacles)
-            window.draw(o.shape);
+        {
+            if (!o.deadly)
+            {
+                window.draw(o.shape);
+                continue;
+            }
+
+            sf::Vector2f op = o.shape.getPosition();
+            sf::Vector2f os = o.shape.getSize();
+
+            int count = std::max(1, static_cast<int>(std::round(os.x / 20.f)));
+            float w = os.x / static_cast<float>(count);
+
+            // The base touches the platform; the tips point away from it
+            float baseY = o.inTopWorld ? op.y + os.y : op.y;
+            float tipY  = o.inTopWorld ? op.y : op.y + os.y;
+
+            for (int i = 0; i < count; ++i)
+            {
+                spike.setPoint(0, {op.x + static_cast<float>(i) * w, baseY});
+                spike.setPoint(1, {op.x + (static_cast<float>(i) + 0.5f) * w, tipY});
+                spike.setPoint(2, {op.x + static_cast<float>(i + 1) * w, baseY});
+                window.draw(spike);
+            }
+        }
 
         // Monsters: upside down (they hang from the platform), gently "breathing"
         for (const auto& m : monsters)
