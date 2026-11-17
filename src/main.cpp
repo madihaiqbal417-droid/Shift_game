@@ -273,7 +273,7 @@ int main()
 
     // Game state and level progress
     GameState state = GameState::Title;
-    const int totalLevels = 6;
+    const int totalLevels = 16;
     int currentLevel = 0;
 
     // Keep names at 22 characters or fewer so they fit between the meter
@@ -284,7 +284,17 @@ int main()
         "3: Mind the Gap",
         "4: Zigzag",
         "5: Timing Is Key",
-        "6: The Long Way Down"
+        "6: The Long Way Down",
+        "7: The Needle",
+        "8: Monster Alley",
+        "9: Tight Fit",
+        "10: The Grinder",
+        "11: Deep Breath",
+        "12: Mirror Maze",
+        "13: Leap of Faith",
+        "14: The Gauntlet",
+        "15: Pressure",
+        "16: Final Shift"
     };
 
     // Texts: in-game
@@ -478,7 +488,7 @@ int main()
             addMonster(230.f, 200.f, 260.f,  90.f);          // guards the first surfacing spot
             addMonster(660.f, 640.f, 700.f, 110.f);          // guards the second one
         }
-        else
+        else if (index == 5)
         {
             // Level 6: one spike strip too wide to jump, a monster gauntlet
             // underneath it, and a short meter.
@@ -488,6 +498,113 @@ int main()
             addObstacle(true,  true,  660.f,  30.f, 30.f);   // top: last hop before the door
             addMonster(200.f, 200.f, 250.f, 110.f);
             addMonster(380.f, 370.f, 420.f, 100.f);
+        }
+        else if (index == 6)
+        {
+            // Level 7: The Needle - Tight gaps between top walls
+            nightmareFillTime = 4.0f;
+            addObstacle(true, false, 150.f, 40.f, 220.f);
+            addObstacle(true, false, 250.f, 40.f, 220.f);
+            addObstacle(true, false, 350.f, 40.f, 220.f);
+            addObstacle(true, false, 450.f, 40.f, 220.f);
+            addObstacle(true, false, 550.f, 40.f, 220.f);
+            addMonster(190.f, 190.f, 240.f, 120.f);
+            addMonster(390.f, 390.f, 440.f, 120.f);
+        }
+        else if (index == 7)
+        {
+            // Level 8: Monster Alley - Fast monsters, mandatory shifts
+            nightmareFillTime = 5.0f;
+            addObstacle(true, true, 100.f, 600.f, 30.f); // Spikes covering almost everything
+            addObstacle(false, false, 200.f, 40.f, 100.f); // Safety spots below
+            addObstacle(false, false, 400.f, 40.f, 100.f);
+            addObstacle(false, false, 600.f, 40.f, 100.f);
+            addMonster(150.f, 100.f, 190.f, 150.f);
+            addMonster(350.f, 300.f, 390.f, 150.f);
+            addMonster(550.f, 500.f, 590.f, 150.f);
+        }
+        else if (index == 8)
+        {
+            // Level 9: Tight Fit - Precision shifting
+            nightmareFillTime = 4.0f;
+            addObstacle(true, false, 200.f, 400.f, 150.f); // Low ceiling
+            addObstacle(false, false, 250.f, 50.f, 100.f);
+            addObstacle(false, false, 400.f, 50.f, 100.f);
+            addObstacle(false, false, 550.f, 50.f, 100.f);
+            addObstacle(true, true, 300.f, 40.f, 30.f); // Spikes in the tunnel
+            addObstacle(true, true, 450.f, 40.f, 30.f);
+        }
+        else if (index == 9)
+        {
+            // Level 10: The Grinder - Short meter, many spikes
+            nightmareFillTime = 3.5f;
+            addObstacle(true, true, 100.f, 40.f, 30.f);
+            addObstacle(true, true, 200.f, 40.f, 30.f);
+            addObstacle(true, true, 300.f, 40.f, 30.f);
+            addObstacle(true, true, 400.f, 40.f, 30.f);
+            addObstacle(true, true, 500.f, 40.f, 30.f);
+            addObstacle(true, true, 600.f, 40.f, 30.f);
+            addMonster(150.f, 120.f, 180.f, 180.f);
+            addMonster(350.f, 320.f, 380.f, 180.f);
+            addMonster(550.f, 520.f, 580.f, 180.f);
+        }
+        else if (index == 10)
+        {
+            // Level 11: Deep Breath - Long bottom section
+            nightmareFillTime = 6.0f;
+            addObstacle(true, false, 100.f, 550.f, 250.f); // Huge block on top
+            addMonster(200.f, 150.f, 600.f, 130.f);
+            addMonster(400.f, 150.f, 600.f, 140.f);
+            addObstacle(false, true, 300.f, 100.f, 30.f); // Spikes on bottom ceiling
+        }
+        else if (index == 11)
+        {
+            // Level 12: Mirror Maze - Rapid shifting
+            nightmareFillTime = 4.0f;
+            for(int i=0; i<6; i++) {
+                addObstacle(i%2==0, false, 150.f + i*100.f, 30.f, 180.f);
+            }
+        }
+        else if (index == 12)
+        {
+            // Level 13: Leap of Faith - Mid-air shifts
+            nightmareFillTime = 5.0f;
+            addObstacle(true, true, 200.f, 150.f, 30.f);
+            addObstacle(false, false, 200.f, 150.f, 100.f); // Must shift mid-jump to land here
+            addObstacle(true, false, 450.f, 150.f, 100.f); // Then shift back to land here
+            addObstacle(false, true, 450.f, 150.f, 30.f);
+        }
+        else if (index == 13)
+        {
+            // Level 14: The Gauntlet - Dense obstacles
+            nightmareFillTime = 4.5f;
+            addMonster(100.f, 80.f, 200.f, 160.f);
+            addObstacle(true, true, 250.f, 50.f, 30.f);
+            addMonster(350.f, 300.f, 400.f, 170.f);
+            addObstacle(true, true, 450.f, 50.f, 30.f);
+            addMonster(550.f, 500.f, 600.f, 180.f);
+            addObstacle(true, true, 650.f, 50.f, 30.f);
+        }
+        else if (index == 14)
+        {
+            // Level 15: Pressure - Extremely fast nightmare
+            nightmareFillTime = 3.0f;
+            addObstacle(true, false, 200.f, 50.f, 200.f);
+            addObstacle(true, false, 400.f, 50.f, 200.f);
+            addObstacle(true, false, 600.f, 50.f, 200.f);
+            // No monsters, but the meter is so fast you must be perfect
+        }
+        else
+        {
+            // Level 16: Final Shift - The ultimate test
+            nightmareFillTime = 3.8f;
+            addObstacle(true, true, 100.f, 200.f, 30.f);
+            addMonster(150.f, 100.f, 250.f, 140.f);
+            addObstacle(false, false, 350.f, 40.f, 150.f);
+            addObstacle(true, false, 450.f, 40.f, 150.f);
+            addObstacle(false, false, 550.f, 40.f, 150.f);
+            addObstacle(true, true, 600.f, 140.f, 30.f);
+            addMonster(650.f, 600.f, 720.f, 200.f);
         }
 
         restart();
