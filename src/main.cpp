@@ -499,54 +499,48 @@ int main()
             addMonster(200.f, 200.f, 250.f, 110.f);
             addMonster(380.f, 370.f, 420.f, 100.f);
         }
-        else if (index == 6)
+                else if (index == 6)
         {
-            // Level 7: The Needle - Tight gaps between top walls
-            nightmareFillTime = 4.0f;
-            addObstacle(true, false, 150.f, 40.f, 220.f);
-            addObstacle(true, false, 250.f, 40.f, 220.f);
-            addObstacle(true, false, 350.f, 40.f, 220.f);
-            addObstacle(true, false, 450.f, 40.f, 220.f);
-            addObstacle(true, false, 550.f, 40.f, 220.f);
-            addMonster(190.f, 190.f, 240.f, 120.f);
-            addMonster(390.f, 390.f, 440.f, 120.f);
+            // Level 7: The Needle. Dive under a wide wall, surface in a narrow
+            // window, cross a bottom wall on top, dive again.
+            nightmareFillTime = 1.4f;
+            addObstacle(true,  false, 130.f, 120.f, 255.f);  // top wall
+            addObstacle(false, false, 290.f,  40.f, 265.f);  // bottom wall
+            addObstacle(true,  false, 400.f, 120.f, 255.f);  // top wall
+            addObstacle(false, false, 590.f,  40.f, 265.f);  // bottom wall
+            addMonster(200.f, 170.f, 230.f, 120.f);
+            addMonster(460.f, 450.f, 480.f, 130.f);
         }
         else if (index == 7)
         {
-            // Level 8: Monster Alley - Fast monsters, mandatory shifts
-            nightmareFillTime = 5.0f;
-            addObstacle(true, true, 100.f, 600.f, 30.f); // Spikes covering almost everything
-            addObstacle(false, false, 200.f, 40.f, 100.f); // Safety spots below
-            addObstacle(false, false, 400.f, 40.f, 100.f);
-            addObstacle(false, false, 600.f, 40.f, 100.f);
-            addMonster(150.f, 100.f, 190.f, 150.f);
-            addMonster(350.f, 300.f, 390.f, 150.f);
-            addMonster(550.f, 500.f, 590.f, 150.f);
+            // Level 8: Monster Alley. One long run underneath, time the monsters.
+            nightmareFillTime = 2.0f;
+            addObstacle(true, false, 160.f, 280.f, 255.f);   // long top wall
+            addMonster(210.f, 200.f, 270.f, 140.f);
+            addMonster(340.f, 330.f, 400.f, 160.f);
         }
         else if (index == 8)
         {
-            // Level 9: Tight Fit - Precision shifting
-            nightmareFillTime = 4.0f;
-            addObstacle(true, false, 200.f, 400.f, 150.f); // Low ceiling
-            addObstacle(false, false, 250.f, 50.f, 100.f);
-            addObstacle(false, false, 400.f, 50.f, 100.f);
-            addObstacle(false, false, 550.f, 50.f, 100.f);
-            addObstacle(true, true, 300.f, 40.f, 30.f); // Spikes in the tunnel
-            addObstacle(true, true, 450.f, 40.f, 30.f);
+            // Level 9: Stepping Stones. Two dives, one bottom wall, final hop.
+            nightmareFillTime = 1.5f;
+            addObstacle(true,  false, 130.f, 120.f, 255.f);
+            addObstacle(false, false, 330.f,  40.f, 265.f);
+            addObstacle(true,  false, 470.f, 140.f, 255.f);
+            addObstacle(true,  true,  650.f,  50.f,  30.f);  // spikes before the door
+            addMonster(170.f, 160.f, 210.f, 130.f);
+            addMonster(520.f, 510.f, 570.f, 150.f);
         }
         else if (index == 9)
         {
-            // Level 10: The Grinder - Short meter, many spikes
-            nightmareFillTime = 3.5f;
-            addObstacle(true, true, 100.f, 40.f, 30.f);
-            addObstacle(true, true, 200.f, 40.f, 30.f);
-            addObstacle(true, true, 300.f, 40.f, 30.f);
-            addObstacle(true, true, 400.f, 40.f, 30.f);
-            addObstacle(true, true, 500.f, 40.f, 30.f);
-            addObstacle(true, true, 600.f, 40.f, 30.f);
-            addMonster(150.f, 120.f, 180.f, 180.f);
-            addMonster(350.f, 320.f, 380.f, 180.f);
-            addMonster(550.f, 520.f, 580.f, 180.f);
+            // Level 10: The Grinder. Long run, spike hop, short dive.
+            nightmareFillTime = 1.5f;
+            addObstacle(true,  false, 120.f, 240.f, 255.f);
+            addObstacle(true,  true,  370.f,  40.f,  30.f);
+            addObstacle(false, false, 420.f,  40.f, 265.f);
+            addObstacle(true,  false, 540.f, 140.f, 255.f);
+            addMonster(170.f, 160.f, 210.f, 150.f);
+            addMonster(290.f, 280.f, 330.f, 170.f);
+            addMonster(580.f, 570.f, 620.f, 180.f);
         }
         else if (index == 10)
         {
