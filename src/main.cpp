@@ -15,6 +15,16 @@ struct Obstacle
     sf::RectangleShape shape;
     bool inTopWorld;
     bool deadly;
+    int  gateId = -1;     // -1 = normal obstacle, 0 or more = a gate
+    bool open = false;    // an open gate is ignored by everything
+};
+
+struct Switch
+{
+    sf::RectangleShape pad;
+    bool inTopWorld;
+    int  id;              // opens the gate with the same id
+    bool pressed;
 };
 
 struct Monster
@@ -52,6 +62,7 @@ int main()
         "SHIFT - Two Realities"
     );
     window.setKeyRepeatEnabled(false);  // one Shift press = one swap
+    window.setFramerateLimit(60);       // same jump height on every computer
 
     // Random number generator for particles
     std::mt19937 rng(std::random_device{}());
@@ -393,6 +404,9 @@ int main()
     // Obstacles
     std::vector<Obstacle> obstacles;
 
+    // Switch pads (step 1: they are only drawn; stepping on them comes next)
+    std::vector<Switch> switches;
+
     // addObstacle(inTopWorld, deadly, x, width, height)
     // Solid obstacles are drawn with a brick texture; deadly ones as spikes.
     auto addObstacle = [&](bool topWorld, bool deadly, float x, float width, float height)
@@ -418,6 +432,28 @@ int main()
         obstacles.push_back(o);
     };
 
+    // addGate(inTopWorld, x, width, height, id)
+    // A gate is a solid wall, drawn gold, that a switch with the same id can open.
+    auto addGate = [&](bool topWorld, float x, float width, float height, int id)
+    {
+        addObstacle(topWorld, false, x, width, height);   // normal solid wall first
+        Obstacle& g = obstacles.back();                   // the one we just added
+        g.gateId = id;
+        g.shape.setTexture(nullptr);                      // drop the brick texture
+        g.shape.setFillColor(sf::Color(230, 190, 60));    // gold
+        g.shape.setOutlineColor(sf::Color(120, 80, 10));
+    };
+
+    // addSwitch(inTopWorld, x, id)
+    // A flat 40 x 8 pad lying on the platform.
+    auto addSwitch = [&](bool topWorld, float x, int id)
+    {
+        Switch s{sf::RectangleShape({40.f, 8.f}), topWorld, id, false};
+        s.pad.setPosition({x, topWorld ? platformTop - 8.f : platformBottom});
+        s.pad.setFillColor(sf::Color(230, 190, 60));
+        switches.push_back(s);
+    };
+
     // Monsters (bottom world only, hanging from the middle platform)
     std::vector<Monster> monsters;
 
@@ -436,6 +472,7 @@ int main()
     {
         obstacles.clear();
         monsters.clear();
+        switches.clear();
 
         if (index == 0)
         {
@@ -443,6 +480,10 @@ int main()
             // and it is solid (not deadly), so exploring is safe.
             nightmareFillTime = 8.f;
             addObstacle(true, false, 380.f, 40.f, 220.f);
+
+            // STEP 1 TEST: remove the two // below to see a gate and a switch
+            addGate(true, 600.f, 40.f, 255.f, 0);   // gold wall (top world)
+            addSwitch(false, 200.f, 0);             // gold pad (bottom world)
         }
         else if (index == 1)
         {
@@ -499,7 +540,7 @@ int main()
             addMonster(200.f, 200.f, 250.f, 110.f);
             addMonster(380.f, 370.f, 420.f, 100.f);
         }
-                else if (index == 6)
+        else if (index == 6)
         {
             // Level 7: The Needle. Dive under a wide wall, surface in a narrow
             // window, cross a bottom wall on top, dive again.
@@ -516,24 +557,26 @@ int main()
             // Level 8: Monster Alley. One long run underneath, time the monsters.
             nightmareFillTime = 2.0f;
             addObstacle(true, false, 160.f, 280.f, 255.f);   // long top wall
-            addMonster(210.f, 200.f, 270.f, 140.f);
-            addMonster(340.f, 330.f, 400.f, 160.f);
+            addObstacle(true, true,  500.f,  90.f,  30.f);   // spikes on top
+            addMonster(210.f, 200.f, 270.f, 170.f);
+            addMonster(390.f, 330.f, 430.f, 190.f);
+            addMonster(570.f, 570.f, 670.f, 160.f);          // start now inside its range
         }
         else if (index == 8)
         {
             // Level 9: Stepping Stones. Two dives, one bottom wall, final hop.
             nightmareFillTime = 1.5f;
-            addObstacle(true,  false, 130.f, 120.f, 255.f);
+            addObstacle(true,  false, 130.f,  50.f, 255.f);
             addObstacle(false, false, 330.f,  40.f, 265.f);
-            addObstacle(true,  false, 470.f, 140.f, 255.f);
+            addObstacle(true,  false, 560.f,  50.f, 255.f);
             addObstacle(true,  true,  650.f,  50.f,  30.f);  // spikes before the door
-            addMonster(170.f, 160.f, 210.f, 130.f);
+            addMonster(170.f, 160.f, 260.f, 150.f);
             addMonster(520.f, 510.f, 570.f, 150.f);
         }
         else if (index == 9)
         {
             // Level 10: The Grinder. Long run, spike hop, short dive.
-            nightmareFillTime = 1.5f;
+            nightmareFillTime = 2.2f;
             addObstacle(true,  false, 120.f, 240.f, 255.f);
             addObstacle(true,  true,  370.f,  40.f,  30.f);
             addObstacle(false, false, 420.f,  40.f, 265.f);
@@ -546,58 +589,84 @@ int main()
         {
             // Level 11: Deep Breath - Long bottom section
             nightmareFillTime = 6.0f;
-            addObstacle(true, false, 100.f, 550.f, 250.f); // Huge block on top
+            addObstacle(true, false, 100.f, 550.f, 250.f);   // Huge block on top
             addMonster(200.f, 150.f, 600.f, 130.f);
             addMonster(400.f, 150.f, 600.f, 140.f);
-            addObstacle(false, true, 300.f, 100.f, 30.f); // Spikes on bottom ceiling
+            addObstacle(false, true, 300.f, 100.f, 30.f);    // Spikes on bottom ceiling
         }
         else if (index == 11)
         {
             // Level 12: Mirror Maze - Rapid shifting
             nightmareFillTime = 4.0f;
-            for(int i=0; i<6; i++) {
-                addObstacle(i%2==0, false, 150.f + i*100.f, 30.f, 180.f);
-            }
+            for (int i = 0; i < 6; i++)
+                addObstacle(i % 2 == 0, false, 150.f + i * 100.f, 30.f, 180.f);
+            addMonster(200.f, 80.f, 350.f, 350.f);
+            addMonster(500.f, 340.f, 650.f, 350.f);
         }
         else if (index == 12)
         {
             // Level 13: Leap of Faith - Mid-air shifts
             nightmareFillTime = 5.0f;
-            addObstacle(true, true, 200.f, 150.f, 30.f);
-            addObstacle(false, false, 200.f, 150.f, 100.f); // Must shift mid-jump to land here
-            addObstacle(true, false, 450.f, 150.f, 100.f); // Then shift back to land here
-            addObstacle(false, true, 450.f, 150.f, 30.f);
+            addObstacle(true,  true,  200.f, 150.f,  30.f);
+            addObstacle(false, false, 200.f, 150.f, 150.f);
+            addObstacle(true,  false, 450.f, 150.f, 200.f);
+            addMonster(400.f, 350.f, 600.f, 210.f);
+            addMonster(600.f, 500.f, 700.f, 210.f);
         }
         else if (index == 13)
         {
             // Level 14: The Gauntlet - Dense obstacles
-            nightmareFillTime = 4.5f;
-            addMonster(100.f, 80.f, 200.f, 160.f);
-            addObstacle(true, true, 250.f, 50.f, 30.f);
-            addMonster(350.f, 300.f, 400.f, 170.f);
-            addObstacle(true, true, 450.f, 50.f, 30.f);
-            addMonster(550.f, 500.f, 600.f, 180.f);
-            addObstacle(true, true, 650.f, 50.f, 30.f);
+            nightmareFillTime = 2.5f;
+            addMonster(150.f, 80.f, 250.f, 200.f);
+            addObstacle(true, true, 130.f, 250.f, 30.f);
+            addMonster(350.f, 230.f, 500.f, 170.f);
+            addObstacle(true, true, 450.f, 250.f, 30.f);
+            addMonster(550.f, 450.f, 600.f, 200.f);
         }
         else if (index == 14)
         {
             // Level 15: Pressure - Extremely fast nightmare
-            nightmareFillTime = 3.0f;
-            addObstacle(true, false, 200.f, 50.f, 200.f);
-            addObstacle(true, false, 400.f, 50.f, 200.f);
-            addObstacle(true, false, 600.f, 50.f, 200.f);
-            // No monsters, but the meter is so fast you must be perfect
+            nightmareFillTime = 0.8f;
+            addObstacle(true, false, 200.f, 70.f, 200.f);
+            addObstacle(true, false, 400.f, 70.f, 200.f);
+            addObstacle(true, false, 600.f, 70.f, 200.f);
+            addMonster(300.f, 200.f, 520.f, 200.f);
+            addMonster(650.f, 600.f, 720.f, 200.f);
         }
-        else
+        else if (index == 15)
         {
             // Level 16: Final Shift - The ultimate test
-            nightmareFillTime = 3.8f;
-            addObstacle(true, true, 100.f, 200.f, 30.f);
-            addMonster(150.f, 100.f, 250.f, 140.f);
-            addObstacle(false, false, 350.f, 40.f, 150.f);
-            addObstacle(true, false, 450.f, 40.f, 150.f);
-            addObstacle(false, false, 550.f, 40.f, 150.f);
-            addObstacle(true, true, 600.f, 140.f, 30.f);
+            nightmareFillTime = 1.4f;
+            addObstacle(true,  true,  100.f, 200.f,  30.f);
+            addMonster(150.f, 100.f, 250.f, 180.f);
+            addObstacle(false, false, 350.f,  40.f, 150.f);
+            addObstacle(true,  false, 450.f,  40.f, 150.f);
+            addObstacle(false, false, 550.f,  40.f, 150.f);
+            addObstacle(true,  true,  600.f, 140.f,  30.f);
+            addMonster(650.f, 600.f, 720.f, 200.f);
+        }
+        else if (index == 16)
+        {
+            // Level 17 (not reachable until totalLevels is raised and a name is added)
+            nightmareFillTime = 0.4f;
+            addObstacle(true,  false, 135.f, 120.f,  80.f);
+            addObstacle(true,  false, 300.f, 120.f, 160.f);
+            addObstacle(true,  true,  255.f,  45.f,  20.f);
+            addObstacle(true,  true,  455.f, 280.f,  20.f);
+            addObstacle(false, true,  130.f, 280.f,  20.f);
+            addMonster(425.f, 425.f, 550.f, 200.f);
+            addMonster(600.f, 575.f, 650.f, 200.f);
+        }
+        else if (index == 17)
+        {
+            // Level 18 (not reachable until totalLevels is raised and a name is added)
+            nightmareFillTime = 1.4f;
+            addObstacle(true,  true,  100.f, 200.f,  30.f);
+            addMonster(150.f, 100.f, 250.f, 180.f);
+            addObstacle(false, false, 350.f,  40.f, 150.f);
+            addObstacle(true,  false, 450.f,  40.f, 150.f);
+            addObstacle(false, false, 550.f,  40.f, 150.f);
+            addObstacle(true,  true,  600.f, 140.f,  30.f);
             addMonster(650.f, 600.f, 720.f, 200.f);
         }
 
@@ -619,7 +688,8 @@ int main()
 
     while (window.isOpen())
     {
-        float dt = clock.restart().asSeconds();
+        // Never let one slow frame become a huge time step
+        float dt = std::min(clock.restart().asSeconds(), 1.f / 30.f);
         elapsed += dt;
 
         // +1 in the top world (gravity down), -1 in the bottom world (gravity up)
@@ -670,10 +740,11 @@ int main()
                         bool targetTop = !inTopWorld;
 
                         // Blocked if a solid obstacle already occupies that spot
+                        // (an open gate does not count)
                         bool blocked = false;
                         for (const auto& o : obstacles)
                         {
-                            if (o.inTopWorld == targetTop && !o.deadly &&
+                            if (o.inTopWorld == targetTop && !o.deadly && !o.open &&
                                 overlaps(mirrored, playerSize, o.shape))
                             {
                                 blocked = true;
@@ -836,7 +907,7 @@ int main()
 
         for (const auto& o : obstacles)
         {
-            if (o.inTopWorld != inTopWorld || o.deadly)
+            if (o.inTopWorld != inTopWorld || o.deadly || o.open)
                 continue;
             if (!overlaps(pos, playerSize, o.shape))
                 continue;
@@ -868,7 +939,7 @@ int main()
 
         for (const auto& o : obstacles)
         {
-            if (o.inTopWorld != inTopWorld || o.deadly)
+            if (o.inTopWorld != inTopWorld || o.deadly || o.open)
                 continue;
             if (!overlaps(pos, playerSize, o.shape))
                 continue;
@@ -1027,6 +1098,9 @@ int main()
         // Obstacles: solid ones are brick rectangles, deadly ones are rows of spikes
         for (const auto& o : obstacles)
         {
+            if (o.open)
+                continue;   // an open gate is invisible
+
             if (!o.deadly)
             {
                 window.draw(o.shape);
@@ -1051,6 +1125,10 @@ int main()
                 window.draw(spike);
             }
         }
+
+        // Switch pads
+        for (const auto& s : switches)
+            window.draw(s.pad);
 
         // Monsters: upside down (they hang from the platform), gently "breathing"
         for (const auto& m : monsters)
